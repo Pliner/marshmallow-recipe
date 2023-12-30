@@ -39,6 +39,7 @@ from .validation import (
     regexp_validate,
     validate,
 )
+from _marshmallow_recipe import fast_dump, fast_dump_bytes  # type: ignore[import-not-found,no-redef]
 
 __all__: tuple[str, ...] = (
     # bake.py
@@ -102,6 +103,7 @@ __all__: tuple[str, ...] = (
     "ValidationFieldError",
     "get_validation_field_errors",
 )
+
 
 __version__ = "0.0.38a2"
 

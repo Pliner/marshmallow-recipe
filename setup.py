@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from setuptools import setup
+from setuptools import setup, Extension
 
 install_requires = ("marshmallow>=2,<4",)
 
@@ -31,7 +31,7 @@ long_description = "\r\n".join(long_description_parts)
 
 # custom PyPI classifier for pytest plugins
 setup(
-    name="marshmallow-recipe",
+    name="marshmallow_recipe",
     version=read_version(),
     description="Bake marshmallow schemas based on dataclasses",
     long_description=long_description,
@@ -58,5 +58,18 @@ setup(
         "Programming Language :: Python :: 3.12",
         "Operating System :: OS Independent",
         "Development Status :: 5 - Production/Stable",
+    ],
+    ext_modules=[
+        Extension(
+            '_marshmallow_recipe',
+            sources=[
+                'marshmallow_recipe/_marshmallow_recipe.c',
+            ],
+            depends=[
+                'marshmallow_recipe/jansson.h',
+                'marshmallow_recipe/jansson_config.h',
+            ],
+            libraries=['jansson'],
+        )
     ],
 )
