@@ -56,12 +56,12 @@ class _FieldDescription(NamedTuple):
 
 
 def bake_schema(
-    t: type,
+    cls: type,
     *,
     naming_case: NamingCase | None = None,
     none_value_handling: NoneValueHandling | None = None,
 ) -> type[m.Schema]:
-    origin: type = get_origin(t) or t
+    origin: type = get_origin(cls) or cls
     if not dataclasses.is_dataclass(origin):
         raise ValueError(f"{origin} is not a dataclass")
 
@@ -73,14 +73,14 @@ def bake_schema(
         cls_naming_case = naming_case
 
     key = _SchemaTypeKey(
-        cls=t,
+        cls=cls,
         naming_case=cls_naming_case,
         none_value_handling=cls_none_value_handling,
     )
     if result := _schema_types.get(key):
         return result
 
-    fields_type_map = get_fields_type_map(t)
+    fields_type_map = get_fields_type_map(cls)
 
     fields = [
         _FieldDescription(
@@ -105,8 +105,8 @@ def bake_schema(
                 raise ValueError(f"Invalid name={second_name} in metadata for field={second.field.name}")
 
     schema_type = type(
-        t.__name__,
-        (_get_base_schema(t, cls_none_value_handling or NoneValueHandling.IGNORE),),
+        cls.__name__,
+        (_get_base_schema(cls, cls_none_value_handling or NoneValueHandling.IGNORE),),
         {"__module__": f"{__package__}.auto_generated"}
         | {
             field.name: get_field_for(
