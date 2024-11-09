@@ -1,5 +1,5 @@
 import dataclasses
-from types import UnionType
+import types
 from typing import Annotated, Any, Generic, Iterable, List, TypeVar, Union
 
 import pytest
@@ -236,7 +236,7 @@ _TStr = TypeVar("_TStr")
 _TList = TypeVar("_TList")
 _TDictIntTStr = TypeVar("_TDictIntTStr")
 
-GENERIC_MAP: dict[TypeVar, type[Any] | UnionType] = {
+GENERIC_MAP: dict[TypeVar, type[Any] | types.UnionType] = {
     _TInt: int,
     _TIntNone: int | None,
     _TStr: str,

@@ -1,12 +1,11 @@
 import dataclasses
+import types
 import typing
-from dataclasses import Field
-from types import GenericAlias, UnionType
 from typing import Annotated, Any, Generic, TypeAlias, TypeVar, Union, get_args, get_origin
 
 _GenericAlias: TypeAlias = typing._GenericAlias  # type: ignore
 
-TypeLike: TypeAlias = type | TypeVar | UnionType | GenericAlias | _GenericAlias
+TypeLike: TypeAlias = type | TypeVar | types.UnionType | types.GenericAlias | _GenericAlias
 TypeVarMap: TypeAlias = dict[TypeVar, TypeLike]
 ClassTypeVarMap: TypeAlias = dict[TypeLike, TypeVarMap]
 FieldsTypeVarMap: TypeAlias = dict[str, TypeVarMap]
@@ -32,7 +31,7 @@ def get_fields_class_map(t: TypeLike) -> FieldsClassMap:
     if not dataclasses.is_dataclass(origin):
         return {}
 
-    names: dict[str, Field] = {}
+    names: dict[str, dataclasses.Field] = {}
     result: FieldsClassMap = {}
 
     mro = origin.__mro__  # type: ignore
@@ -51,15 +50,15 @@ def build_subscripted_type(t: TypeLike, type_var_map: TypeVarMap) -> TypeLike:
         return build_subscripted_type(type_var_map[t], type_var_map)
 
     origin = get_origin(t)
-    if origin is Union or isinstance(t, UnionType):
+    if origin is Union or isinstance(t, types.UnionType):
         return Union[*(build_subscripted_type(x, type_var_map) for x in get_args(t))]  # type: ignore
 
     if origin is Annotated:
         t, *annotations = get_args(t)
         return Annotated[build_subscripted_type(t, type_var_map), *annotations]  # type: ignore
 
-    if origin and isinstance(t, GenericAlias):
-        return GenericAlias(origin, tuple(build_subscripted_type(x, type_var_map) for x in get_args(t)))
+    if origin and isinstance(t, types.GenericAlias):
+        return types.GenericAlias(origin, tuple(build_subscripted_type(x, type_var_map) for x in get_args(t)))
 
     if origin and isinstance(t, _GenericAlias):
         return _GenericAlias(origin, tuple(build_subscripted_type(x, type_var_map) for x in get_args(t)))
