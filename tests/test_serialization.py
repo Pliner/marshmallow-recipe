@@ -652,7 +652,7 @@ def test_nested_default() -> None:
         (True, True, lambda x: x, does_not_raise()),
     ],
 )
-def test_dump_generic_extract_type(
+def test_generic_extract_type_on_dump(
     frozen: bool, slots: bool, get_type: Callable[[type], type | None], context: ContextManager
 ) -> None:
     _TValue = TypeVar("_TValue")
@@ -696,7 +696,7 @@ def test_generic_in_parents() -> None:
     assert mr.load(ChildClass, dumped) == instance
 
 
-def test_generic_reused_type_var() -> None:
+def test_generic_type_var_with_reuse() -> None:
     _T = TypeVar("_T")
 
     @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
@@ -715,7 +715,7 @@ def test_generic_reused_type_var() -> None:
     assert mr.load(T2[str], dumped) == instance
 
 
-def test_override_field_with_generic() -> None:
+def test_generic_with_field_override() -> None:
     @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
     class Value1:
         v1: str
@@ -745,7 +745,7 @@ def test_override_field_with_generic() -> None:
     assert mr.load(T2[Value2, int], dumped) == instance
 
 
-def test_generic_reuse() -> None:
+def test_generic_origin_reuse() -> None:
     _TItem = TypeVar("_TItem")
 
     @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)

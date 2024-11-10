@@ -42,6 +42,7 @@ def get_fields_class_map(t: TypeLike) -> FieldsClassMap:
             if names.get(field.name) != field:
                 names[field.name] = field
                 result[field.name] = base
+
     return result
 
 
@@ -68,33 +69,35 @@ def build_subscripted_type(t: TypeLike, type_var_map: TypeVarMap) -> TypeLike:
 
 def get_class_type_var_map(t: TypeLike) -> ClassTypeVarMap:
     class_type_var_map: ClassTypeVarMap = {}
-    _get_class_type_var_map(t, class_type_var_map)
+    _build_class_type_var_map(t, class_type_var_map)
     return class_type_var_map
 
 
-def _get_class_type_var_map(t: TypeLike, class_type_var_map: ClassTypeVarMap) -> None:
-    if _get_parameters(t):
+def _build_class_type_var_map(t: TypeLike, class_type_var_map: ClassTypeVarMap) -> None:
+    if _get_params(t):
         raise Exception(f"Expected subscripted generic, but got unsubscripted {t}")
 
     type_var_map: TypeVarMap = {}
     origin = get_origin(t) or t
-    parameters = _get_parameters(origin)
+    params = _get_params(origin)
     args = get_args(t)
-    if parameters or args:
-        if not parameters or not args or len(parameters) != len(args):
+    if params or args:
+        if not params or not args or len(params) != len(args):
             raise Exception(f"Unexpected generic {t}")
         class_type_var_map[origin] = type_var_map
-        for i, parameter in enumerate(parameters):
+        for i, parameter in enumerate(params):
             assert isinstance(parameter, TypeVar)
             type_var_map[parameter] = args[i]
 
     if orig_bases := _get_orig_bases(origin):
         for orig_base in orig_bases:
-            if get_origin(orig_base) is not Generic:
-                _get_class_type_var_map(build_subscripted_type(orig_base, type_var_map), class_type_var_map)
+            if get_origin(orig_base) is Generic:
+                continue
+            subscripted_base = build_subscripted_type(orig_base, type_var_map)
+            _build_class_type_var_map(subscripted_base, class_type_var_map)
 
 
-def _get_parameters(t: Any) -> tuple[TypeLike, ...] | None:
+def _get_params(t: Any) -> tuple[TypeLike, ...] | None:
     return hasattr(t, "__parameters__") and getattr(t, "__parameters__") or None
 
 

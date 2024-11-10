@@ -12,7 +12,7 @@ from marshmallow_recipe.generics import (
 )
 
 
-def test_get_fields_type_map_overrides() -> None:
+def test_get_fields_type_map_with_field_override() -> None:
     @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
     class Value1:
         v1: str
@@ -101,6 +101,17 @@ def test_get_fields_type_map_not_subscripted() -> None:
     )
 
 
+def test_get_fields_type_map_for_subscripted() -> None:
+    _T = TypeVar("_T")
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Xxx(Generic[_T]):
+        xxx: _T
+
+    actual = get_fields_type_map(Xxx[str])
+    assert actual == {"xxx": str}
+
+
 def test_get_fields_class_map() -> None:
     _T = TypeVar("_T")
 
@@ -142,7 +153,7 @@ def test_get_fields_class_map() -> None:
     }
 
 
-def test_get_class_type_var_map_inheritance() -> None:
+def test_get_class_type_var_map_with_inheritance() -> None:
     _T1 = TypeVar("_T1")
     _T2 = TypeVar("_T2")
     _T3 = TypeVar("_T3")
@@ -187,7 +198,7 @@ def test_get_class_type_var_map_inheritance() -> None:
     }
 
 
-def test_get_class_type_var_map_nesting() -> None:
+def test_get_class_type_var_map_with_nesting() -> None:
     _T1 = TypeVar("_T1")
     _T2 = TypeVar("_T2")
     _T3 = TypeVar("_T3")

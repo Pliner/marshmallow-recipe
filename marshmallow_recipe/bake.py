@@ -51,7 +51,7 @@ _schema_types: dict[_SchemaTypeKey, type[m.Schema]] = {}
 
 class _FieldDescription(NamedTuple):
     field: dataclasses.Field
-    subscripted_type: TypeLike
+    value_type: TypeLike
     metadata: Metadata
 
 
@@ -110,12 +110,12 @@ def bake_schema(
         {"__module__": f"{__package__}.auto_generated"}
         | {
             field.name: get_field_for(
-                data_type,
+                value_type,
                 metadata,
                 naming_case=naming_case,
                 none_value_handling=none_value_handling,
             )
-            for field, data_type, metadata in fields
+            for field, value_type, metadata in fields
         },
     )
     _schema_types[key] = schema_type
