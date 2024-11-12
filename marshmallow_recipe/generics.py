@@ -6,11 +6,11 @@ from typing import Annotated, Any, Generic, TypeAlias, TypeVar, Union, get_args,
 _GenericAlias: TypeAlias = typing._GenericAlias  # type: ignore
 
 TypeLike: TypeAlias = type | TypeVar | types.UnionType | types.GenericAlias | _GenericAlias
+FieldsTypeMap: TypeAlias = dict[str, TypeLike]
 TypeVarMap: TypeAlias = dict[TypeVar, TypeLike]
+FieldsClassMap: TypeAlias = dict[str, TypeLike]
 ClassTypeVarMap: TypeAlias = dict[TypeLike, TypeVarMap]
 FieldsTypeVarMap: TypeAlias = dict[str, TypeVarMap]
-FieldsClassMap: TypeAlias = dict[str, TypeLike]
-FieldsTypeMap: TypeAlias = dict[str, TypeLike]
 
 
 def get_fields_type_map(t: TypeLike) -> FieldsTypeMap:
@@ -52,11 +52,11 @@ def build_subscripted_type(t: TypeLike, type_var_map: TypeVarMap) -> TypeLike:
 
     origin = get_origin(t)
     if origin is Union or origin is types.UnionType:
-        return Union[*(build_subscripted_type(x, type_var_map) for x in get_args(t))]  # type: ignore
+        return Union[*(build_subscripted_type(x, type_var_map) for x in get_args(t))]
 
     if origin is Annotated:
         t, *annotations = get_args(t)
-        return Annotated[build_subscripted_type(t, type_var_map), *annotations]  # type: ignore
+        return Annotated[build_subscripted_type(t, type_var_map), *annotations]
 
     if origin and isinstance(t, types.GenericAlias):
         return types.GenericAlias(origin, tuple(build_subscripted_type(x, type_var_map) for x in get_args(t)))
