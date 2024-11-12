@@ -17,6 +17,7 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
+    get_origin,
 )
 
 import pytest
@@ -647,8 +648,11 @@ def test_nested_default() -> None:
     "frozen, slots, get_type, context",
     [
         (False, False, lambda x: None, does_not_raise()),
-        (True, False, lambda x: None, pytest.raises(Exception, match="Expected subscripted generic")),
-        (True, True, lambda x: None, pytest.raises(Exception, match="Expected subscripted generic")),
+        (True, False, lambda x: None, pytest.raises(ValueError, match="Expected subscripted generic")),
+        (False, True, lambda x: None, pytest.raises(ValueError, match="Expected subscripted generic")),
+        (True, True, lambda x: None, pytest.raises(ValueError, match="Expected subscripted generic")),
+        (True, True, lambda x: get_origin(x), pytest.raises(ValueError, match="Expected subscripted generic")),
+        (True, True, lambda x: list[int], pytest.raises(ValueError, match="is not subscripted version of")),
         (True, True, lambda x: x, does_not_raise()),
     ],
 )
@@ -745,7 +749,7 @@ def test_generic_with_field_override() -> None:
     assert mr.load(T2[Value2, int], dumped) == instance
 
 
-def test_generic_origin_reuse() -> None:
+def test_generic_reuse_with_different_args() -> None:
     _TItem = TypeVar("_TItem")
 
     @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
@@ -763,3 +767,36 @@ def test_generic_origin_reuse() -> None:
 
     assert dumped == {"items": ["q", "w", "e"]}
     assert mr.load(GenericContainer[str], dumped) == container_str
+
+
+def test_sdfdfsd():
+    import dataclasses
+    from typing import Generic, TypeVar
+
+    import marshmallow_recipe as mr
+
+    T = TypeVar("T")
+
+    @dataclasses.dataclass()
+    class Regular(Generic[T]):
+        value: T
+
+    mr.dump(Regular[int](value=123))  # it works without explicit cls arg
+
+    @dataclasses.dataclass(frozen=True)
+    class Frozen(Generic[T]):
+        value: T
+
+    mr.dump(Frozen[int](value=123), cls=Frozen[int])  # cls required generic frozen
+
+    @dataclasses.dataclass(slots=True)
+    class Slots(Generic[T]):
+        value: T
+
+    mr.dump(Slots[int](value=123), cls=Slots[int])  # cls required for generic with slots
+
+    @dataclasses.dataclass(slots=True)
+    class SlotsNonGeneric(Slots[int]):
+        pass
+
+    mr.dump(SlotsNonGeneric(value=123))  # cls not required

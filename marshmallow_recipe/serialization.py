@@ -1,6 +1,6 @@
 import dataclasses
 import importlib.metadata
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar, get_origin
 
 import marshmallow as m
 
@@ -154,8 +154,12 @@ EmptySchema = m.Schema
 
 
 def _extract_type(data: Any, cls: type | None) -> type:
-    if cls:
-        return cls
     if hasattr(data, "__orig_class__"):
         return getattr(data, "__orig_class__")
-    return type(data)
+    data_type = type(data)
+    if not cls or cls == data_type:
+        return data_type
+    origin = get_origin(cls)
+    if origin != data_type:
+        raise ValueError(f"{cls=} is not subscripted version of {data_type}")
+    return cls
