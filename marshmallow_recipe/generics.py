@@ -19,9 +19,9 @@ def get_fields_type_map(t: TypeLike) -> FieldsTypeMap:
         return {}
 
     class_type_var_map = get_class_type_var_map(t)
-    fields_type_map = get_fields_class_map(t)
+    fields_class_map = get_fields_class_map(t)
     return {
-        f.name: build_subscripted_type(f.type, class_type_var_map.get(fields_type_map[f.name], {}))
+        f.name: build_subscripted_type(f.type, class_type_var_map.get(fields_class_map[f.name], {}))
         for f in dataclasses.fields(origin)
     }
 
@@ -35,13 +35,13 @@ def get_fields_class_map(t: TypeLike) -> FieldsClassMap:
     result: FieldsClassMap = {}
 
     mro = origin.__mro__  # type: ignore
-    for base in (*mro[-1:0:-1], origin):
-        if not dataclasses.is_dataclass(base):
+    for cls in (*mro[-1:0:-1], origin):
+        if not dataclasses.is_dataclass(cls):
             continue
-        for field in dataclasses.fields(base):
+        for field in dataclasses.fields(cls):
             if names.get(field.name) != field:
                 names[field.name] = field
-                result[field.name] = base
+                result[field.name] = cls
 
     return result
 
@@ -51,7 +51,7 @@ def build_subscripted_type(t: TypeLike, type_var_map: TypeVarMap) -> TypeLike:
         return build_subscripted_type(type_var_map[t], type_var_map)
 
     origin = get_origin(t)
-    if origin is Union or isinstance(t, types.UnionType):
+    if origin is Union or origin is types.UnionType:
         return Union[*(build_subscripted_type(x, type_var_map) for x in get_args(t))]  # type: ignore
 
     if origin is Annotated:
@@ -75,7 +75,7 @@ def get_class_type_var_map(t: TypeLike) -> ClassTypeVarMap:
 
 def _build_class_type_var_map(t: TypeLike, class_type_var_map: ClassTypeVarMap) -> None:
     if _get_params(t):
-        raise Exception(f"Expected subscripted generic, but got unsubscripted {t}")
+        raise ValueError(f"Expected subscripted generic, but got unsubscripted {t}")
 
     type_var_map: TypeVarMap = {}
     origin = get_origin(t) or t
@@ -83,7 +83,7 @@ def _build_class_type_var_map(t: TypeLike, class_type_var_map: ClassTypeVarMap) 
     args = get_args(t)
     if params or args:
         if not params or not args or len(params) != len(args):
-            raise Exception(f"Unexpected generic {t}")
+            raise ValueError(f"Unexpected generic {t}")
         class_type_var_map[origin] = type_var_map
         for i, parameter in enumerate(params):
             assert isinstance(parameter, TypeVar)
