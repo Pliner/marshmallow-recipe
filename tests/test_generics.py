@@ -80,9 +80,10 @@ def test_get_fields_type_map_generic_inheritance() -> None:
     }
 
 
-def test_get_fields_type_map_non_data_class() -> None:
-    actual = get_fields_type_map(int | None)
-    assert actual == {}
+def test_get_fields_type_map_non_dataclass() -> None:
+    with pytest.raises(ValueError) as e:
+        get_fields_type_map(list[int])
+    assert e.value.args[0] == "<class 'list'> is not a dataclass"
 
 
 def test_get_fields_type_map_not_subscripted() -> None:

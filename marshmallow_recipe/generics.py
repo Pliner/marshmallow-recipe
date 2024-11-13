@@ -1,9 +1,14 @@
 import dataclasses
 import types
 import typing
-from typing import Annotated, Any, Generic, TypeAlias, TypeVar, Union, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, Any, Generic, TypeAlias, TypeVar, Union, get_args, get_origin
 
 _GenericAlias: TypeAlias = typing._GenericAlias  # type: ignore
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
+else:
+    DataclassInstance: TypeAlias = type
 
 TypeLike: TypeAlias = type | TypeVar | types.UnionType | types.GenericAlias | _GenericAlias
 FieldsTypeMap: TypeAlias = dict[str, TypeLike]
@@ -13,29 +18,25 @@ ClassTypeVarMap: TypeAlias = dict[TypeLike, TypeVarMap]
 FieldsTypeVarMap: TypeAlias = dict[str, TypeVarMap]
 
 
-def get_fields_type_map(t: TypeLike) -> FieldsTypeMap:
-    origin = get_origin(t) or t
+def get_fields_type_map(cls: type) -> FieldsTypeMap:
+    origin: type = get_origin(cls) or cls
     if not dataclasses.is_dataclass(origin):
-        return {}
+        raise ValueError(f"{origin} is not a dataclass")
 
-    class_type_var_map = get_class_type_var_map(t)
-    fields_class_map = get_fields_class_map(t)
+    class_type_var_map = get_class_type_var_map(cls)
+    fields_class_map = get_fields_class_map(origin)
     return {
         f.name: build_subscripted_type(f.type, class_type_var_map.get(fields_class_map[f.name], {}))
         for f in dataclasses.fields(origin)
     }
 
 
-def get_fields_class_map(t: TypeLike) -> FieldsClassMap:
-    origin = get_origin(t) or t
-    if not dataclasses.is_dataclass(origin):
-        return {}
-
+def get_fields_class_map(cls: type[DataclassInstance]) -> FieldsClassMap:
     names: dict[str, dataclasses.Field] = {}
     result: FieldsClassMap = {}
 
-    mro = origin.__mro__  # type: ignore
-    for cls in (*mro[-1:0:-1], origin):
+    mro = cls.__mro__
+    for cls in (*mro[-1:0:-1], cls):
         if not dataclasses.is_dataclass(cls):
             continue
         for field in dataclasses.fields(cls):
