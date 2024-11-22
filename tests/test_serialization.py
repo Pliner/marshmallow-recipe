@@ -767,36 +767,3 @@ def test_generic_reuse_with_different_args() -> None:
 
     assert dumped == {"items": ["q", "w", "e"]}
     assert mr.load(GenericContainer[str], dumped) == container_str
-
-
-def test_sdfdfsd():
-    import dataclasses
-    from typing import Generic, TypeVar
-
-    import marshmallow_recipe as mr
-
-    T = TypeVar("T")
-
-    @dataclasses.dataclass()
-    class Regular(Generic[T]):
-        value: T
-
-    mr.dump(Regular[int](value=123))  # it works without explicit cls arg
-
-    @dataclasses.dataclass(frozen=True)
-    class Frozen(Generic[T]):
-        value: T
-
-    mr.dump(Frozen[int](value=123), cls=Frozen[int])  # cls required generic frozen
-
-    @dataclasses.dataclass(slots=True)
-    class Slots(Generic[T]):
-        value: T
-
-    mr.dump(Slots[int](value=123), cls=Slots[int])  # cls required for generic with slots
-
-    @dataclasses.dataclass(slots=True)
-    class SlotsNonGeneric(Slots[int]):
-        pass
-
-    mr.dump(SlotsNonGeneric(value=123))  # cls not required
