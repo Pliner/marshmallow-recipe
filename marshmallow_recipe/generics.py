@@ -18,6 +18,23 @@ ClassTypeVarMap: TypeAlias = dict[TypeLike, TypeVarMap]
 FieldsTypeVarMap: TypeAlias = dict[str, TypeVarMap]
 
 
+def extract_type(data: Any, cls: type | None) -> type:
+    data_type = _get_orig_class(data) or type(data)
+
+    if not _is_unsubscripted_type(data_type):
+        if cls and data_type != cls:
+            raise ValueError(f"{cls=} is invalid but can be removed, actual type is {data_type}")
+        return data_type
+
+    if not cls:
+        raise ValueError(f"Explicit cls required for unsubscripted type {data_type}")
+
+    if _is_unsubscripted_type(cls) or get_origin(cls) != data_type:
+        raise ValueError(f"{cls=} is not subscripted version of {data_type}")
+
+    return cls
+
+
 def get_fields_type_map(cls: type) -> FieldsTypeMap:
     origin: type = get_origin(cls) or cls
     if not dataclasses.is_dataclass(origin):
@@ -96,6 +113,14 @@ def _build_class_type_var_map(t: TypeLike, class_type_var_map: ClassTypeVarMap) 
                 continue
             subscripted_base = build_subscripted_type(orig_base, type_var_map)
             _build_class_type_var_map(subscripted_base, class_type_var_map)
+
+
+def _is_unsubscripted_type(t: TypeLike) -> bool:
+    return bool(_get_params(t)) or any(_is_unsubscripted_type(arg) for arg in get_args(t) or [])
+
+
+def _get_orig_class(t: Any) -> type | None:
+    return hasattr(t, "__orig_class__") and getattr(t, "__orig_class__") or None
 
 
 def _get_params(t: Any) -> tuple[TypeLike, ...] | None:

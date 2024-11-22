@@ -648,11 +648,13 @@ def test_nested_default() -> None:
     "frozen, slots, get_type, context",
     [
         (False, False, lambda x: None, does_not_raise()),
-        (True, False, lambda x: None, pytest.raises(ValueError, match="Expected subscripted generic")),
-        (False, True, lambda x: None, pytest.raises(ValueError, match="Expected subscripted generic")),
-        (True, True, lambda x: None, pytest.raises(ValueError, match="Expected subscripted generic")),
-        (True, True, lambda x: get_origin(x), pytest.raises(ValueError, match="Expected subscripted generic")),
-        (True, True, lambda x: list[int], pytest.raises(ValueError, match="is not subscripted version of")),
+        (False, False, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is invalid but can be removed")),
+        (True, False, lambda x: None, pytest.raises(ValueError, match="Explicit cls required for unsubscripted type")),
+        (False, True, lambda x: None, pytest.raises(ValueError, match="Explicit cls required for unsubscripted type")),
+        (True, True, lambda x: None, pytest.raises(ValueError, match="Explicit cls required for unsubscripted type")),
+        (True, True, lambda x: get_origin(x), pytest.raises(ValueError, match=".Data'> is not subscripted version of")),
+        (True, True, lambda x: list[int], pytest.raises(ValueError, match="int] is not subscripted version of")),
+        (True, True, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is not subscripted version of")),
         (True, True, lambda x: x, does_not_raise()),
     ],
 )
@@ -673,6 +675,35 @@ def test_generic_extract_type_on_dump(
     instance_many = [Data[int](value=123), Data[int](value=456)]
     with context:
         dumped = mr.dump_many(instance_many, cls=get_type(Data[int]))
+        assert dumped == [{"value": 123}, {"value": 456}]
+
+
+@pytest.mark.parametrize(
+    "frozen, slots, get_type, context",
+    [
+        (False, False, lambda x: None, does_not_raise()),
+        (False, True, lambda x: x, does_not_raise()),
+        (True, False, lambda x: x, does_not_raise()),
+        (True, True, lambda x: x, does_not_raise()),
+        (False, False, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is invalid but can be removed")),
+        (True, True, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is invalid but can be removed")),
+    ],
+)
+def test_non_generic_extract_type_on_dump(
+    frozen: bool, slots: bool, get_type: Callable[[type], type | None], context: ContextManager
+) -> None:
+    @dataclasses.dataclass(frozen=frozen, slots=slots)
+    class Data:
+        value: int
+
+    instance = Data(value=123)
+    with context:
+        dumped = mr.dump(instance, cls=get_type(Data))
+        assert dumped == {"value": 123}
+
+    instance_many = [Data(value=123), Data(value=456)]
+    with context:
+        dumped = mr.dump_many(instance_many, cls=get_type(Data))
         assert dumped == [{"value": 123}, {"value": 456}]
 
 

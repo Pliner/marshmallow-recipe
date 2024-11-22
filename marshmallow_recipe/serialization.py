@@ -1,10 +1,11 @@
 import dataclasses
 import importlib.metadata
-from typing import Any, Protocol, TypeVar, get_origin
+from typing import Any, Protocol, TypeVar
 
 import marshmallow as m
 
 from .bake import bake_schema
+from .generics import extract_type
 from .naming_case import NamingCase
 
 _T = TypeVar("_T")
@@ -78,7 +79,7 @@ if _MARSHMALLOW_VERSION_MAJOR >= 3:
     load_many = load_many_v3
 
     def dump_v3(data: Any, *, naming_case: NamingCase | None = None, cls: type | None = None) -> dict[str, Any]:
-        data_schema = schema_v3(_extract_type(data, cls), naming_case=naming_case)
+        data_schema = schema_v3(extract_type(data, cls), naming_case=naming_case)
         dumped: dict[str, Any] = data_schema.dump(data)  # type: ignore
         if errors := data_schema.validate(dumped):
             raise m.ValidationError(errors)
@@ -91,7 +92,7 @@ if _MARSHMALLOW_VERSION_MAJOR >= 3:
     ) -> list[dict[str, Any]]:
         if not data:
             return []
-        data_schema = schema_v3(_extract_type(data[0], cls), many=True, naming_case=naming_case)
+        data_schema = schema_v3(extract_type(data[0], cls), many=True, naming_case=naming_case)
         dumped: list[dict[str, Any]] = data_schema.dump(data)  # type: ignore
         if errors := data_schema.validate(dumped):
             raise m.ValidationError(errors)
@@ -125,7 +126,7 @@ else:
     load_many = load_many_v2
 
     def dump_v2(data: Any, *, naming_case: NamingCase | None = None, cls: type | None = None) -> dict[str, Any]:
-        data_schema = schema_v2(_extract_type(data, cls), naming_case=naming_case)
+        data_schema = schema_v2(extract_type(data, cls), naming_case=naming_case)
         dumped, errors = data_schema.dump(data)
         if errors:
             raise m.ValidationError(errors)
@@ -140,7 +141,7 @@ else:
     ) -> list[dict[str, Any]]:
         if not data:
             return []
-        data_schema = schema_v2(_extract_type(data[0], cls), many=True, naming_case=naming_case)
+        data_schema = schema_v2(extract_type(data[0], cls), many=True, naming_case=naming_case)
         dumped, errors = data_schema.dump(data)
         if errors:
             raise m.ValidationError(errors)
@@ -151,15 +152,3 @@ else:
     dump_many = dump_many_v2
 
 EmptySchema = m.Schema
-
-
-def _extract_type(data: Any, cls: type | None) -> type:
-    if hasattr(data, "__orig_class__"):
-        return getattr(data, "__orig_class__")
-    data_type = type(data)
-    if not cls or cls == data_type:
-        return data_type
-    origin = get_origin(cls)
-    if origin != data_type:
-        raise ValueError(f"{cls=} is not subscripted version of {data_type}")
-    return cls

@@ -1,15 +1,79 @@
 import dataclasses
 import types
-from typing import Annotated, Any, Generic, Iterable, List, TypeVar, Union
+from contextlib import nullcontext as does_not_raise
+from typing import Annotated, Any, ContextManager, Generic, Iterable, List, TypeVar, Union
+from unittest.mock import ANY
 
 import pytest
 
 from marshmallow_recipe.generics import (
     build_subscripted_type,
+    extract_type,
     get_class_type_var_map,
     get_fields_class_map,
     get_fields_type_map,
 )
+
+T = TypeVar("T")
+
+
+@dataclasses.dataclass()
+class OtherType:
+    pass
+
+
+@dataclasses.dataclass()
+class NonGeneric:
+    pass
+
+
+@dataclasses.dataclass()
+class RegularGeneric(Generic[T]):
+    pass
+
+
+@dataclasses.dataclass(frozen=True)
+class FrozenGeneric(Generic[T]):
+    pass
+
+
+def e(match: str) -> ContextManager:
+    return pytest.raises(ValueError, match=match)
+
+
+@pytest.mark.parametrize(
+    "data, cls, expected, context",
+    [
+        (1, None, int, does_not_raise()),
+        (1, int, int, does_not_raise()),
+        (1, OtherType, ANY, e("OtherType'> is invalid but can be removed, actual type is <class 'int'>")),
+        (NonGeneric(), None, NonGeneric, does_not_raise()),
+        (NonGeneric(), NonGeneric, NonGeneric, does_not_raise()),
+        (NonGeneric(), OtherType, ANY, e("OtherType'> is invalid but can be removed, actual type is <class 'tests")),
+        (RegularGeneric(), None, ANY, e("Explicit cls required for unsubscripted type <class 'tests")),
+        (RegularGeneric(), RegularGeneric, ANY, e("RegularGeneric'> is not subscripted version of <class 'tests")),
+        (RegularGeneric(), RegularGeneric[int], RegularGeneric[int], does_not_raise()),
+        (RegularGeneric[int](), None, RegularGeneric[int], does_not_raise()),
+        (RegularGeneric[int](), RegularGeneric[int], RegularGeneric[int], does_not_raise()),
+        (RegularGeneric[int](), RegularGeneric[str], ANY, e("str] is invalid but can be removed, actual type is")),
+        (RegularGeneric[int](), RegularGeneric, ANY, e("RegularGeneric'> is invalid but can be removed, actual type")),
+        (RegularGeneric[RegularGeneric[int]](), RegularGeneric[RegularGeneric[str]], ANY, e("str]] is invalid but")),
+        (RegularGeneric[int](), OtherType, ANY, e("OtherType'> is invalid but can be removed, actual type is tests")),
+        (FrozenGeneric[int](), None, ANY, e("Explicit cls required for unsubscripted type <class")),
+        (FrozenGeneric[int](), FrozenGeneric[str], FrozenGeneric[str], does_not_raise()),
+        (FrozenGeneric(), FrozenGeneric[int], FrozenGeneric[int], does_not_raise()),
+        (FrozenGeneric(), FrozenGeneric[list], FrozenGeneric[list], does_not_raise()),
+        (FrozenGeneric(), FrozenGeneric[dict], FrozenGeneric[dict], does_not_raise()),
+        (FrozenGeneric(), FrozenGeneric[FrozenGeneric[str]], FrozenGeneric[FrozenGeneric[str]], does_not_raise()),
+        (FrozenGeneric(), FrozenGeneric, ANY, e("FrozenGeneric'> is not subscripted version of <class 'tests")),
+        (FrozenGeneric(), FrozenGeneric[FrozenGeneric], ANY, e("FrozenGeneric] is not subscripted version of")),
+        (FrozenGeneric(), OtherType, ANY, e("OtherType'> is not subscripted version of <class 'tests")),
+    ],
+)
+def test_extract_type(data: Any, cls: type, expected: type, context: ContextManager) -> None:
+    with context:
+        actual = extract_type(data, cls)
+        assert actual == expected
 
 
 def test_get_fields_type_map_with_field_override() -> None:
