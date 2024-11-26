@@ -263,6 +263,53 @@ def test_get_class_type_var_map_with_inheritance() -> None:
     }
 
 
+def test_get_class_type_var_map_with_incompatible_inheritance() -> None:
+    _T = TypeVar("_T")
+
+    @dataclasses.dataclass()
+    class Aaa(Generic[_T]):
+        pass
+
+    @dataclasses.dataclass()
+    class Bbb(Aaa[int]):
+        pass
+
+    @dataclasses.dataclass()
+    class Ccc(Bbb, Aaa[str]):  # type: ignore
+        pass
+
+    with pytest.raises(ValueError, match="Incompatible Base class") as e:
+        get_class_type_var_map(Ccc)
+    assert "<locals>.Aaa'> with generic args {~_T: <class 'int'>} and {~_T: <class 'str'>}" in e.value.args[0]
+
+
+def test_get_class_type_var_map_with_duplicated_generic_inheritance() -> None:
+    _T = TypeVar("_T")
+
+    @dataclasses.dataclass()
+    class NonGeneric:
+        pass
+
+    @dataclasses.dataclass()
+    class Aaa(Generic[_T]):
+        pass
+
+    @dataclasses.dataclass()
+    class Bbb(Aaa[int], NonGeneric):
+        pass
+
+    @dataclasses.dataclass()
+    class Ccc(Bbb, Aaa[int], NonGeneric):
+        pass
+
+    actual = get_class_type_var_map(Ccc)
+    assert actual == {
+        Aaa: {
+            _T: int,
+        },
+    }
+
+
 def test_get_class_type_var_map_with_nesting() -> None:
     _T1 = TypeVar("_T1")
     _T2 = TypeVar("_T2")
@@ -277,13 +324,13 @@ def test_get_class_type_var_map_with_nesting() -> None:
         pass
 
     @dataclasses.dataclass()
-    class Ccc(Generic[_T1, _T2, _T3], Aaa[Bbb[list[Annotated[_T2, "xxx"]]], _T1 | None]):
+    class Ccc(Generic[_T1, _T2, _T3], Aaa[Bbb[list[Annotated[Bbb[_T2], "xxx"]]], _T1 | None]):
         pass
 
     actual = get_class_type_var_map(Ccc[bool, str, float])
     assert actual == {
         Aaa: {
-            _T1: Bbb[list[Annotated[str, "xxx"]]],
+            _T1: Bbb[list[Annotated[Bbb[str], "xxx"]]],
             _T2: bool | None,
         },
         Ccc: {

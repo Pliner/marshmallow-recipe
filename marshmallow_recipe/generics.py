@@ -102,10 +102,15 @@ def _build_class_type_var_map(t: TypeLike, class_type_var_map: ClassTypeVarMap) 
     if params or args:
         if not params or not args or len(params) != len(args):
             raise ValueError(f"Unexpected generic {t}")
-        class_type_var_map[origin] = type_var_map
         for i, parameter in enumerate(params):
             assert isinstance(parameter, TypeVar)
             type_var_map[parameter] = args[i]
+        if origin not in class_type_var_map:
+            class_type_var_map[origin] = type_var_map
+        elif class_type_var_map[origin] != type_var_map:
+            raise ValueError(
+                f"Incompatible Base class {origin} with generic args {class_type_var_map[origin]} and {type_var_map}"
+            )
 
     if orig_bases := _get_orig_bases(origin):
         for orig_base in orig_bases:
