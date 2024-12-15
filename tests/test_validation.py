@@ -298,6 +298,12 @@ def test_get_field_errors() -> None:
             {"value": "invalid", "values": ["invalid"], "nested": {"value": "invalid", "values": ["invalid"]}},
         )
 
+    with pytest.raises(mr.ValidationError) as exc_info2:
+        mr.load_slim(
+            Container,
+            {"value": "invalid", "values": ["invalid"], "nested": {"value": "invalid", "values": ["invalid"]}},
+        )
+
     assert mr.get_validation_field_errors(exc_info.value) == [
         mr.ValidationFieldError(
             name="nested",
@@ -315,3 +321,55 @@ def test_get_field_errors() -> None:
             nested_errors=[mr.ValidationFieldError(name="0", error="Not a valid integer.")],
         ),
     ]
+
+    assert mr.get_validation_field_errors(exc_info2.value) == mr.get_validation_field_errors(exc_info.value)
+
+
+def test_get_field_errors_many() -> None:
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class NestedContainer:
+        value: int
+        values: list[int]
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Container:
+        value: int
+        values: list[int]
+        nested: NestedContainer
+
+    with pytest.raises(mr.ValidationError) as exc_info:
+        mr.load_many(
+            Container,
+            [{"value": "invalid", "values": ["invalid"], "nested": {"value": "invalid", "values": ["invalid"]}}],
+        )
+
+    with pytest.raises(mr.ValidationError) as exc_info2:
+        mr.load_slim_many(
+            Container,
+            [{"value": "invalid", "values": ["invalid"], "nested": {"value": "invalid", "values": ["invalid"]}}],
+        )
+
+    assert mr.get_validation_field_errors(exc_info.value) == [
+        mr.ValidationFieldError(
+            name="0",
+            nested_errors=[
+                mr.ValidationFieldError(
+                    name="nested",
+                    nested_errors=[
+                        mr.ValidationFieldError(name="value", error="Not a valid integer."),
+                        mr.ValidationFieldError(
+                            name="values",
+                            nested_errors=[mr.ValidationFieldError(name="0", error="Not a valid integer.")],
+                        ),
+                    ],
+                ),
+                mr.ValidationFieldError(name="value", error="Not a valid integer."),
+                mr.ValidationFieldError(
+                    name="values",
+                    nested_errors=[mr.ValidationFieldError(name="0", error="Not a valid integer.")],
+                ),
+            ],
+        )
+    ]
+
+    assert mr.get_validation_field_errors(exc_info2.value) == mr.get_validation_field_errors(exc_info.value)
