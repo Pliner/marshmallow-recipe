@@ -125,15 +125,15 @@ def _is_unsubscripted_type(t: TypeLike) -> bool:
 
 
 def _get_orig_class(t: Any) -> type | None:
-    return hasattr(t, "__orig_class__") and getattr(t, "__orig_class__") or None
+    return getattr(t, "__orig_class__", None)
 
 
 def _get_params(t: Any) -> tuple[TypeLike, ...] | None:
-    return hasattr(t, "__parameters__") and getattr(t, "__parameters__") or None
+    return getattr(t, "__parameters__", None)
 
 
 def _get_orig_bases(t: Any) -> tuple[TypeLike, ...] | None:
-    return hasattr(t, "__orig_bases__") and getattr(t, "__orig_bases__") or None
+    return getattr(t, "__orig_bases__", None)
 
 
 def _subscript_with_any(t: TypeLike) -> TypeLike:
