@@ -14,8 +14,6 @@ Supported types:
 - `Mapping` (with typed keys and values), `Set`, `Sequence`
 
 Example:
-class Annotated:
-pass
 
 ```python
 import dataclasses
@@ -76,4 +74,39 @@ assert loaded.annual_turnover is mr.MISSING
 loaded = mr.load(CompanyUpdateData, {"annual_turnover": None})
 assert loaded.name is mr.MISSING
 assert loaded.annual_turnover is None
+```
+
+Also generics are supported. All works automatically except one case. Dump operation of generic dataclass with `frozen=True` or `slots=True` requires explicitly specified subscripted generic type as `cls` argument of `dump` and `dump_many` methods.
+
+```python
+import dataclasses
+from typing import Generic, TypeVar
+import marshmallow_recipe as mr
+
+T = TypeVar("T")
+
+@dataclasses.dataclass()
+class Regular(Generic[T]):
+    value: T
+
+mr.dump(Regular[int](value=123))  # it works without explicit cls arg
+
+@dataclasses.dataclass(frozen=True)
+class Frozen(Generic[T]):
+    value: T
+
+mr.dump(Frozen[int](value=123), cls=Frozen[int])  # cls required for frozen generic
+
+@dataclasses.dataclass(slots=True)
+class Slots(Generic[T]):
+    value: T
+
+mr.dump(Slots[int](value=123), cls=Slots[int])  # cls required for generic with slots
+
+@dataclasses.dataclass(slots=True)
+class SlotsNonGeneric(Slots[int]):
+    pass
+
+mr.dump(SlotsNonGeneric(value=123))  # cls not required
+
 ```

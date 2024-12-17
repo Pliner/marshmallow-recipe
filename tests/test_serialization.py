@@ -3,7 +3,22 @@ import datetime
 import decimal
 import enum
 import uuid
-from typing import Annotated, Any, Dict, FrozenSet, List, Set, Tuple
+from contextlib import nullcontext as does_not_raise
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    ContextManager,
+    Dict,
+    FrozenSet,
+    Generic,
+    Iterable,
+    List,
+    Set,
+    Tuple,
+    TypeVar,
+    get_origin,
+)
 
 import pytest
 
@@ -627,3 +642,159 @@ def test_nested_default() -> None:
         int_container: IntContainer = dataclasses.field(default_factory=IntContainer)
 
     assert mr.load(RootContainer, {}) == RootContainer()
+
+
+@pytest.mark.parametrize(
+    "frozen, slots, get_type, context",
+    [
+        (False, False, lambda x: None, does_not_raise()),
+        (False, False, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is invalid but can be removed")),
+        (True, False, lambda x: None, pytest.raises(ValueError, match="Explicit cls required for unsubscripted type")),
+        (False, True, lambda x: None, pytest.raises(ValueError, match="Explicit cls required for unsubscripted type")),
+        (True, True, lambda x: None, pytest.raises(ValueError, match="Explicit cls required for unsubscripted type")),
+        (True, True, lambda x: get_origin(x), pytest.raises(ValueError, match=".Data'> is not subscripted version of")),
+        (True, True, lambda x: list[int], pytest.raises(ValueError, match="int] is not subscripted version of")),
+        (True, True, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is not subscripted version of")),
+        (True, True, lambda x: x, does_not_raise()),
+    ],
+)
+def test_generic_extract_type_on_dump(
+    frozen: bool, slots: bool, get_type: Callable[[type], type | None], context: ContextManager
+) -> None:
+    _TValue = TypeVar("_TValue")
+
+    @dataclasses.dataclass(frozen=frozen, slots=slots)
+    class Data(Generic[_TValue]):
+        value: _TValue
+
+    instance = Data[int](value=123)
+    with context:
+        dumped = mr.dump(instance, cls=get_type(Data[int]))
+        assert dumped == {"value": 123}
+
+    instance_many = [Data[int](value=123), Data[int](value=456)]
+    with context:
+        dumped = mr.dump_many(instance_many, cls=get_type(Data[int]))
+        assert dumped == [{"value": 123}, {"value": 456}]
+
+
+@pytest.mark.parametrize(
+    "frozen, slots, get_type, context",
+    [
+        (False, False, lambda x: None, does_not_raise()),
+        (False, True, lambda x: x, does_not_raise()),
+        (True, False, lambda x: x, does_not_raise()),
+        (True, True, lambda x: x, does_not_raise()),
+        (False, False, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is invalid but can be removed")),
+        (True, True, lambda x: int, pytest.raises(ValueError, match="<class 'int'> is invalid but can be removed")),
+    ],
+)
+def test_non_generic_extract_type_on_dump(
+    frozen: bool, slots: bool, get_type: Callable[[type], type | None], context: ContextManager
+) -> None:
+    @dataclasses.dataclass(frozen=frozen, slots=slots)
+    class Data:
+        value: int
+
+    instance = Data(value=123)
+    with context:
+        dumped = mr.dump(instance, cls=get_type(Data))
+        assert dumped == {"value": 123}
+
+    instance_many = [Data(value=123), Data(value=456)]
+    with context:
+        dumped = mr.dump_many(instance_many, cls=get_type(Data))
+        assert dumped == [{"value": 123}, {"value": 456}]
+
+
+def test_generic_in_parents() -> None:
+    _TXxx = TypeVar("_TXxx")
+    _TData = TypeVar("_TData")
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Data(Generic[_TXxx]):
+        xxx: _TXxx
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class ParentClass(Generic[_TData]):
+        value: str
+        data: _TData
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class ChildClass(ParentClass[Data[int]]):
+        pass
+
+    instance = ChildClass(value="vvv", data=Data(xxx=111))
+    dumped = mr.dump(instance)
+
+    assert dumped == {"value": "vvv", "data": {"xxx": 111}}
+    assert mr.load(ChildClass, dumped) == instance
+
+
+def test_generic_type_var_with_reuse() -> None:
+    _T = TypeVar("_T")
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class T1(Generic[_T]):
+        t1: _T
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class T2(Generic[_T], T1[int]):
+        t2: _T
+
+    instance = T2[str](t1=1, t2="2")
+
+    dumped = mr.dump(instance, cls=T2[str])
+
+    assert dumped == {"t1": 1, "t2": "2"}
+    assert mr.load(T2[str], dumped) == instance
+
+
+def test_generic_with_field_override() -> None:
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Value1:
+        v1: str
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Value2(Value1):
+        v2: str
+
+    _TValue = TypeVar("_TValue", bound=Value1)
+    _TItem = TypeVar("_TItem")
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class T1(Generic[_TItem]):
+        value: Value1
+        iterable: Iterable[_TItem]
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class T2(Generic[_TValue, _TItem], T1[_TItem]):
+        value: _TValue
+        iterable: set[_TItem]
+
+    instance = T2[Value2, int](value=Value2(v1="aaa", v2="bbb"), iterable=set([3, 4, 5]))
+
+    dumped = mr.dump(instance, cls=T2[Value2, int])
+
+    assert dumped == {"value": {"v1": "aaa", "v2": "bbb"}, "iterable": [3, 4, 5]}
+    assert mr.load(T2[Value2, int], dumped) == instance
+
+
+def test_generic_reuse_with_different_args() -> None:
+    _TItem = TypeVar("_TItem")
+
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class GenericContainer(Generic[_TItem]):
+        items: list[_TItem]
+
+    container_int = GenericContainer[int](items=[1, 2, 3])
+    dumped = mr.dump(container_int, cls=GenericContainer[int])
+
+    assert dumped == {"items": [1, 2, 3]}
+    assert mr.load(GenericContainer[int], dumped) == container_int
+
+    container_str = GenericContainer[str](items=["q", "w", "e"])
+    dumped = mr.dump(container_str, cls=GenericContainer[str])
+
+    assert dumped == {"items": ["q", "w", "e"]}
+    assert mr.load(GenericContainer[str], dumped) == container_str

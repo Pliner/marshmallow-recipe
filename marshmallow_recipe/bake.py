@@ -6,7 +6,7 @@ import enum
 import inspect
 import types
 import uuid
-from typing import Annotated, Any, Protocol, TypeVar, Union, get_args, get_origin
+from typing import Annotated, Any, NamedTuple, Protocol, TypeVar, Union, cast, get_args, get_origin
 
 import marshmallow as m
 
@@ -29,6 +29,7 @@ from .fields import (
     tuple_field,
     uuid_field,
 )
+from .generics import TypeLike, get_fields_type_map
 from .hooks import get_pre_loads
 from .metadata import EMPTY_METADATA, Metadata, is_metadata
 from .naming_case import NamingCase
@@ -48,16 +49,23 @@ _MARSHMALLOW_VERSION_MAJOR = int(m.__version__.split(".")[0])
 _schema_types: dict[_SchemaTypeKey, type[m.Schema]] = {}
 
 
+class _FieldDescription(NamedTuple):
+    field: dataclasses.Field
+    value_type: TypeLike
+    metadata: Metadata
+
+
 def bake_schema(
     cls: type,
     *,
     naming_case: NamingCase | None = None,
     none_value_handling: NoneValueHandling | None = None,
 ) -> type[m.Schema]:
-    if not dataclasses.is_dataclass(cls):
-        raise ValueError(f"{cls} is not a dataclass")
+    origin: type = get_origin(cls) or cls
+    if not dataclasses.is_dataclass(origin):
+        raise ValueError(f"{origin} is not a dataclass")
 
-    if options := try_get_options_for(cls):
+    if options := try_get_options_for(origin):
         cls_none_value_handling = none_value_handling or options.none_value_handling
         cls_naming_case = naming_case or options.naming_case
     else:
@@ -72,40 +80,42 @@ def bake_schema(
     if result := _schema_types.get(key):
         return result
 
-    fields_with_metadata = [
-        (
+    fields_type_map = get_fields_type_map(cls)
+
+    fields = [
+        _FieldDescription(
             field,
+            fields_type_map[field.name],
             _get_metadata(
                 name=field.name if cls_naming_case is None else cls_naming_case(field.name),
                 default=_get_field_default(field),
                 metadata=field.metadata,
             ),
         )
-        for field in dataclasses.fields(cls)
+        for field in dataclasses.fields(origin)
         if field.init
     ]
 
-    for field, _ in fields_with_metadata:
-        for other_field, metadata in fields_with_metadata:
-            if field is other_field:
+    for first in fields:
+        for second in fields:
+            if first is second:
                 continue
+            second_name = second.metadata["name"]
+            if first.field.name == second_name:
+                raise ValueError(f"Invalid name={second_name} in metadata for field={second.field.name}")
 
-            other_field_name = metadata["name"]
-            if field.name == other_field_name:
-                raise ValueError(f"Invalid name={other_field_name} in metadata for field={other_field.name}")
-
-    schema_type: type[m.Schema] = type(
+    schema_type = type(
         cls.__name__,
         (_get_base_schema(cls, cls_none_value_handling or NoneValueHandling.IGNORE),),
         {"__module__": f"{__package__}.auto_generated"}
         | {
             field.name: get_field_for(
-                field.type,  # type: ignore
+                value_type,
                 metadata,
                 naming_case=naming_case,
                 none_value_handling=none_value_handling,
             )
-            for field, metadata in fields_with_metadata
+            for field, value_type, metadata in fields
         },
     )
     _schema_types[key] = schema_type
@@ -113,20 +123,18 @@ def bake_schema(
 
 
 def get_field_for(
-    type: type,
+    t: TypeLike,
     metadata: Metadata,
     naming_case: NamingCase | None,
     none_value_handling: NoneValueHandling | None,
 ) -> m.fields.Field:
-    if type is Any:
+    if t is Any:
         return raw_field(**metadata)
 
-    type = _substitute_any_to_open_generic(type)
-
-    if underlying_type_from_optional := _try_get_underlying_type_from_optional(type):
+    if underlying_type_from_optional := _try_get_underlying_type_from_optional(t):
         required = False
         allow_none = True
-        type = underlying_type_from_optional
+        t = underlying_type_from_optional
     elif metadata.get("default", dataclasses.MISSING) is not dataclasses.MISSING:
         required = False
         allow_none = False
@@ -134,19 +142,19 @@ def get_field_for(
         required = True
         allow_none = False
 
-    if inspect.isclass(type) and issubclass(type, enum.Enum):
-        return enum_field(enum_type=type, required=required, allow_none=allow_none, **metadata)
+    if inspect.isclass(t) and issubclass(t, enum.Enum):
+        return enum_field(enum_type=t, required=required, allow_none=allow_none, **metadata)
 
-    if dataclasses.is_dataclass(type):
+    if dataclasses.is_dataclass(get_origin(t) or t):
         return nested_field(
-            bake_schema(type, naming_case=naming_case, none_value_handling=none_value_handling),
+            bake_schema(cast(type, t), naming_case=naming_case, none_value_handling=none_value_handling),
             required=required,
             allow_none=allow_none,
             **metadata,
         )
 
-    if (origin := get_origin(type)) is not None:
-        arguments = get_args(type)
+    if (origin := get_origin(t)) is not None:
+        arguments = get_args(t)
 
         if origin is list or origin is collections.abc.Sequence:
             collection_field_metadata = dict(metadata)
@@ -268,11 +276,11 @@ def get_field_for(
                 none_value_handling=none_value_handling,
             )
 
-    field_factory = _SIMPLE_TYPE_FIELD_FACTORIES.get(type)
-    if field_factory:
+    if t in _SIMPLE_TYPE_FIELD_FACTORIES:
+        field_factory = _SIMPLE_TYPE_FIELD_FACTORIES[t]
         return field_factory(required=required, allow_none=allow_none, **metadata)
 
-    raise ValueError(f"Unsupported {type=}")
+    raise ValueError(f"Unsupported {t=}")
 
 
 if _MARSHMALLOW_VERSION_MAJOR >= 3:
@@ -373,26 +381,12 @@ def _get_metadata(*, name: str, default: Any, metadata: collections.abc.Mapping[
     return Metadata(values)
 
 
-def _substitute_any_to_open_generic(type: type) -> type:
-    if type is list:
-        return list[Any]
-    if type is set:
-        return set[Any]
-    if type is frozenset:
-        return frozenset[Any]
-    if type is dict:
-        return dict[Any, Any]
-    if type is tuple:
-        return tuple[Any, ...]
-    return type
-
-
-def _try_get_underlying_type_from_optional(type: type) -> type | None:
+def _try_get_underlying_type_from_optional(t: TypeLike) -> TypeLike | None:
     # to support Union[int, None] and int | None
-    if get_origin(type) is Union or isinstance(type, types.UnionType):  # type: ignore
-        type_args = get_args(type)
+    if get_origin(t) is Union or isinstance(t, types.UnionType):  # type: ignore
+        type_args = get_args(t)
         if types.NoneType not in type_args or len(type_args) != 2:
-            raise ValueError(f"Unsupported {type=}")
+            raise ValueError(f"Unsupported {t=}")
         return next(type_arg for type_arg in type_args if type_arg is not types.NoneType)  # noqa
 
     return None
